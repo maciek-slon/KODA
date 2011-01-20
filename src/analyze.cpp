@@ -79,7 +79,7 @@ public:
 
 			sum_l += symbols[current_slice].count;
 			sum_u = total - sum_l;
-			diff = abs(sum_l - sum_u)
+			diff = abs(sum_l - sum_u);
 		}
 
 		if (current_slice != from) {

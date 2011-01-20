@@ -6,13 +6,14 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <string>
 
 #include <cv.h>
 #include <highgui.h>
 
-static string binary(uchar i)
+static std::string binary(uchar i)
 {
-	string result;
+	std::string result;
 	for (int bit = 0; bit < 8; ++bit) {
 		result = (char)((i & 1) + '0') + result;
 		i >>= 1;

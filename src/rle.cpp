@@ -8,6 +8,7 @@
 #include <vector>
 #include <cstdio>
 #include <fstream>
+#include <string>
 
 #include <cv.h>
 #include <highgui.h>
@@ -31,9 +32,9 @@ struct RLEHeader {
 };
 
 template <typename T>
-static string binary(T i)
+static std::string binary(T i)
 {
-	string result;
+	std::string result;
 	for (int bit = 0; bit < sizeof(T)*8; ++bit) {
 		result = (char)((i & 1) + '0') + result;
 		i >>= 1;
@@ -66,7 +67,7 @@ public:
 
 	void saveToFile(const std::string & filename) {
 		uint32_t tmp = m_buffer.size();
-		ofstream f(filename.c_str(), ios_base::out | ios_base::binary);
+		std::ofstream f(filename.c_str(), std::ios_base::out | std::ios_base::binary);
 		f.write((char*)&(m_header.first_symbol), 2);
 		f.write((char*)&(m_header.width), 4);
 		f.write((char*)&(m_header.height), 4);
@@ -76,7 +77,7 @@ public:
 
 	void loadFromFile(const std::string & filename) {
 		uint32_t tmp;
-		ifstream f(filename.c_str(), ios_base::in | ios_base::binary);
+		std::ifstream f(filename.c_str(), std::ios_base::in | std::ios_base::binary);
 		f.read((char*)&(m_header.first_symbol), 2);
 		f.read((char*)&(m_header.width), 4);
 		f.read((char*)&(m_header.height), 4);
