@@ -13,6 +13,8 @@
 #include <cv.h>
 #include <highgui.h>
 
+#include <boost/program_options.hpp>
+
 // ===============================================================================================
 //
 // Bit-wise splitting and merging
@@ -165,27 +167,6 @@ cv::Mat nkb2gray(const cv::Mat & img, bool reverse = false) {
 //
 // ===============================================================================================
 
-//int prefixes[] = {  0x00,   0x02,   0x06,   0x0E,   0x1E,   0x3E,       0x7E};
-//int pref_msk[] = {  0x80,   0xC0,   0xE0,   0xF0,   0xF8,   0xFC,       0xFE};
-//int pref_res[] = {  0x00,   0x80,   0xC0,   0xE0,   0xF0,   0xF8,       0xFC};
-//int pref_len[] = {     1,      2,      3,      4,      5,      6,          7};
-//int data_len[] = {     0,      1,      2,      3,      4,     10,         25};
-//int data_msk[] = {  0x00,   0x01,   0x03,   0x07,   0x0F, 0x03FF, 0x01FFFFFF};
-//int data_min[] = {     1,      2,      4,      8,     16,     32,       1056};
-//int data_max[] = {     1,      3,      7,     15,     31,   1055,   33555487};
-
-//int prefixes[] = {  0x00,   0x02,   0x06,   0x0E,   0x1E,   0x3E,       0x7E};
-//int pref_msk[] = {  0x80,   0xC0,   0xE0,   0xF0,   0xF8,   0xFC,       0xFE};
-//int pref_res[] = {  0x00,   0x80,   0xC0,   0xE0,   0xF0,   0xF8,       0xFC};
-//int pref_len[] = {     1,      2,      3,      4,      5,      6,          7};
-//int data_len[] = {     0,      1,      3,      3,      4,     10,         25};
-//int data_msk[] = {  0x00,   0x01,   0x07,   0x07,   0x0F, 0x03FF, 0x01FFFFFF};
-//int data_min[] = {     1,      2,      4,     12,     20,     36,       1060};
-//int data_max[] = {     1,      3,     11,     19,     35,   1059,   33555491};
-
-//#define INTERVALS 7
-
-
 struct RLEHeader {
 	uint8_t first_symbol;
 	uint16_t width;
@@ -262,6 +243,30 @@ struct RleCodebook {
 			data_len[4] = 5;
 			data_len[5] = 10;
 			data_len[6] = 25;
+		} else if (type == 3) {
+			data_len[0] = 1;
+			data_len[1] = 3;
+			data_len[2] = 5;
+			data_len[3] = 7;
+			data_len[4] = 9;
+			data_len[5] = 11;
+			data_len[6] = 25;
+		} else if (type == 4) {
+			data_len[0] = 2;
+			data_len[1] = 3;
+			data_len[2] = 4;
+			data_len[3] = 5;
+			data_len[4] = 6;
+			data_len[5] = 7;
+			data_len[6] = 25;
+		} else if (type == 5) {
+			data_len[0] = 1;
+			data_len[1] = 4;
+			data_len[2] = 5;
+			data_len[3] = 6;
+			data_len[4] = 7;
+			data_len[5] = 8;
+			data_len[6] = 25;
 		}
 
 		int last = 0;
@@ -271,7 +276,7 @@ struct RleCodebook {
 			data_min[i] = last+1;
 			data_max[i] = last + range;
 			last = data_max[i];
-			std::cout << data_min[i] << "-" << data_max[i] << std::endl;
+			//std::cout << data_min[i] << "-" << data_max[i] << std::endl;
 		}
 	}
 
@@ -611,11 +616,11 @@ cv::Mat de_xor(const cv::Mat & img) {
 struct Header {
 	bool gray;
 	int channels;
+	// 1 - RGB, 2 - HSV
+	int conversion;
 };
 
-bool encode(const std::string & in_fname, const std::string & out_fname) {
-	Header header;
-	header.gray = true;
+bool encode(const std::string & in_fname, const std::string & out_fname, Header header) {
 
 
 	cv::Mat img = cv::imread(in_fname.c_str());
@@ -630,6 +635,9 @@ bool encode(const std::string & in_fname, const std::string & out_fname) {
 
 	if (img.channels() > 1) {
 		// split image into channels
+		if (header.conversion == 2) {
+			cv::cvtColor(img, img, CV_BGR2HSV);
+		}
 		cv::split(img, channels);
 	} else {
 		// image is one channel
@@ -651,7 +659,7 @@ bool encode(const std::string & in_fname, const std::string & out_fname) {
 		for (int p = 0; p < 8; ++p) {
 			int best = 0;
 			int bestt = -1;
-			for (int type=0; type < 3; ++type) {
+			for (int type=0; type < 6; ++type) {
 				RleBuffer buf = rle(getBitPlane(channels[i], p), type);
 				if (bestt < 0 || buf.size() < best) {
 					best = buf.size();
@@ -660,6 +668,7 @@ bool encode(const std::string & in_fname, const std::string & out_fname) {
 			}
 
 			RleBuffer buf = rle(getBitPlane(channels[i], p), bestt);
+			std::cout << i << p << ": " << bestt << "@" << buf.size() << std::endl;
 			buf.saveToFile(f);
 		}
 	}
@@ -695,6 +704,11 @@ bool decode(const std::string & in_fname, const std::string & out_fname) {
 	}
 
 	cv::merge(channels, tmp);
+
+	if (header.conversion == 2) {
+		cv::cvtColor(tmp, tmp, CV_HSV2BGR);
+	}
+
 	cv::imwrite(out_fname.c_str(), tmp);
 
 	return true;
@@ -706,14 +720,76 @@ bool decode(const std::string & in_fname, const std::string & out_fname) {
 //
 // ===============================================================================================
 
+
+namespace po = boost::program_options;
+
 int main(int argc, char * argv[]) {
-	if (argc < 2) {
-		std::cout << "Usage: " << argv[0] << " IMAGE" << std::endl;
+	// Declare the supported options.
+
+	std::string conversion;
+	std::string input_fname;
+	std::string output_fname;
+	bool gray;
+
+	po::options_description desc("Allowed options");
+	desc.add_options()
+		("help", "produce help message")
+		("conversion,C", po::value<std::string>(&conversion)->default_value("RGB"), "colorspace conversion\n"
+				"possible values are: RGB, HSV, Bayer")
+		("gray,G", "convert channels to Gray encoding")
+		("xor,X", "xor bit planes")
+		("input,I",po::value<std::string>(&input_fname), "input file")
+		("output,O",po::value<std::string>(&output_fname), "output file")
+	;
+
+	po::variables_map vm;
+
+	try {
+		po::store(po::parse_command_line(argc, argv, desc), vm);
+		po::notify(vm);
+	}
+	catch (const po::error & u) {
+		std::cout << u.what() << "\n";
 		return 0;
 	}
 
-	encode(argv[1], "output.rle");
-	decode("output.rle", "input.bmp");
+	if (vm.count("help") || argc < 2) {
+		std::cout << desc << "\n";
+		return 0;
+	}
+
+	if (input_fname == "") {
+		std::cout << "No input file specified.\n";
+		return 0;
+	}
+
+	if (output_fname == "") {
+		output_fname = input_fname + ".rle";
+	}
+
+	Header header;
+	if (vm.count("gray")) {
+		header.gray = 1;
+	} else {
+		header.gray = 0;
+	}
+
+	if (conversion == "RGB") {
+		header.conversion = 1;
+	} else
+	if (conversion == "HSV") {
+		header.conversion = 2;
+	} else
+	if (conversion == "Bayer") {
+		header.conversion = 3;
+	} else {
+		std::cout << "Unknown conversion: " << conversion << "\n";
+		return 0;
+	}
+
+
+	encode(input_fname, output_fname, header);
+	decode(output_fname, std::string("or") + input_fname);
 
 	return 0;
 }

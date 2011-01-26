@@ -3,7 +3,8 @@
 SET(LIBRARY_OUTPUT_PATH    ${CMAKE_BINARY_DIR}/lib)
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
 
-
+# Find all required packages
+FIND_PACKAGE( Boost REQUIRED program_options)
 
 # Find OpenCV library files
 FIND_PACKAGE( OpenCV REQUIRED )
@@ -24,6 +25,6 @@ FIND_PACKAGE( OpenCV REQUIRED )
 #TARGET_LINK_LIBRARIES(rle ${OpenCV_LIBS})
 
 ADD_EXECUTABLE(codec codec.cpp)
-TARGET_LINK_LIBRARIES(codec ${OpenCV_LIBS})
+TARGET_LINK_LIBRARIES(codec ${OpenCV_LIBS} ${Boost_PROGRAM_OPTIONS_LIBRARY})
 
 #ADD_EXECUTABLE(analyze analyze.cpp)
