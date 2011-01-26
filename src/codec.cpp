@@ -13,6 +13,12 @@
 #include <cv.h>
 #include <highgui.h>
 
+// ===============================================================================================
+//
+// Bit-wise splitting and merging
+//
+// ===============================================================================================
+
 cv::Mat getBitPlane(const cv::Mat & img, int plane) {
 
 	if (img.channels() != 1) {
@@ -90,9 +96,11 @@ cv::Mat mergeBitPlanes(const std::vector<cv::Mat> & planes) {
 	return result;
 }
 
+// ===============================================================================================
 //
 // NKB2GRAY
 //
+// ===============================================================================================
 
 static std::string binary(uchar i)
 {
@@ -151,27 +159,38 @@ cv::Mat nkb2gray(const cv::Mat & img, bool reverse = false) {
 	return result;
 }
 
+// ===============================================================================================
+//
+// RLE
+//
+// ===============================================================================================
 
+//int prefixes[] = {  0x00,   0x02,   0x06,   0x0E,   0x1E,   0x3E,       0x7E};
+//int pref_msk[] = {  0x80,   0xC0,   0xE0,   0xF0,   0xF8,   0xFC,       0xFE};
+//int pref_res[] = {  0x00,   0x80,   0xC0,   0xE0,   0xF0,   0xF8,       0xFC};
+//int pref_len[] = {     1,      2,      3,      4,      5,      6,          7};
+//int data_len[] = {     0,      1,      2,      3,      4,     10,         25};
+//int data_msk[] = {  0x00,   0x01,   0x03,   0x07,   0x0F, 0x03FF, 0x01FFFFFF};
+//int data_min[] = {     1,      2,      4,      8,     16,     32,       1056};
+//int data_max[] = {     1,      3,      7,     15,     31,   1055,   33555487};
 
+//int prefixes[] = {  0x00,   0x02,   0x06,   0x0E,   0x1E,   0x3E,       0x7E};
+//int pref_msk[] = {  0x80,   0xC0,   0xE0,   0xF0,   0xF8,   0xFC,       0xFE};
+//int pref_res[] = {  0x00,   0x80,   0xC0,   0xE0,   0xF0,   0xF8,       0xFC};
+//int pref_len[] = {     1,      2,      3,      4,      5,      6,          7};
+//int data_len[] = {     0,      1,      3,      3,      4,     10,         25};
+//int data_msk[] = {  0x00,   0x01,   0x07,   0x07,   0x0F, 0x03FF, 0x01FFFFFF};
+//int data_min[] = {     1,      2,      4,     12,     20,     36,       1060};
+//int data_max[] = {     1,      3,     11,     19,     35,   1059,   33555491};
 
-
-
-int prefixes[] = {  0x00,   0x02,   0x06,   0x0E,   0x1E,   0x3E,       0x7E};
-int pref_msk[] = {  0x80,   0xC0,   0xE0,   0xF0,   0xF8,   0xFC,       0xFE};
-int pref_res[] = {  0x00,   0x80,   0xC0,   0xE0,   0xF0,   0xF8,       0xFC};
-int pref_len[] = {     1,      2,      3,      4,      5,      6,          7};
-int data_len[] = {     0,      1,      2,      3,      4,     10,         25};
-int data_msk[] = {  0x00,   0x01,   0x03,   0x07,   0x0F, 0x03FF, 0x01FFFFFF};
-int data_min[] = {     1,      2,      4,      8,     16,     32,       1056};
-int data_max[] = {     1,      3,      7,     15,     31,   1055,   33555487};
-
-#define INTERVALS 7
+//#define INTERVALS 7
 
 
 struct RLEHeader {
 	uint8_t first_symbol;
 	uint16_t width;
 	uint16_t height;
+	uint8_t type;
 };
 
 template <typename T>
@@ -185,11 +204,102 @@ static std::string binary(T i)
 	return result;
 }
 
+struct RleCodebook {
+	RleCodebook(int type) : INTERVALS(7), m_type(type) {
+		prefixes[0] = 0x00;
+		prefixes[1] = 0x02;
+		prefixes[2] = 0x06;
+		prefixes[3] = 0x0E;
+		prefixes[4] = 0x1E;
+		prefixes[5] = 0x3E;
+		prefixes[6] = 0x7E;
+
+		pref_msk[0] = 0x80;
+		pref_msk[1] = 0xC0;
+		pref_msk[2] = 0xE0;
+		pref_msk[3] = 0xF0;
+		pref_msk[4] = 0xF8;
+		pref_msk[5] = 0xFC;
+		pref_msk[6] = 0xFE;
+
+		pref_res[0] = 0x00;
+		pref_res[1] = 0x80;
+		pref_res[2] = 0xC0;
+		pref_res[3] = 0xE0;
+		pref_res[4] = 0xF0;
+		pref_res[5] = 0xF8;
+		pref_res[6] = 0xFc;
+
+		pref_len[0] = 1;
+		pref_len[1] = 2;
+		pref_len[2] = 3;
+		pref_len[3] = 4;
+		pref_len[4] = 5;
+		pref_len[5] = 6;
+		pref_len[6] = 7;
+
+		if (type == 0) {
+			data_len[0] = 0;
+			data_len[1] = 1;
+			data_len[2] = 2;
+			data_len[3] = 3;
+			data_len[4] = 4;
+			data_len[5] = 10;
+			data_len[6] = 25;
+		} else if (type == 1) {
+			data_len[0] = 0;
+			data_len[1] = 0;
+			data_len[2] = 1;
+			data_len[3] = 2;
+			data_len[4] = 4;
+			data_len[5] = 10;
+			data_len[6] = 25;
+		} else if (type == 2) {
+			data_len[0] = 1;
+			data_len[1] = 2;
+			data_len[2] = 3;
+			data_len[3] = 4;
+			data_len[4] = 5;
+			data_len[5] = 10;
+			data_len[6] = 25;
+		}
+
+		int last = 0;
+		for (int i = 0; i < 7; ++i) {
+			int range = 1 << data_len[i];
+			data_msk[i] = (1 << data_len[i]) - 1;
+			data_min[i] = last+1;
+			data_max[i] = last + range;
+			last = data_max[i];
+			std::cout << data_min[i] << "-" << data_max[i] << std::endl;
+		}
+	}
+
+	int prefixes[7];
+	int pref_msk[7];
+	int pref_res[7];
+	int pref_len[7];
+	int data_len[7];
+	int data_msk[7];
+	int data_min[7];
+	int data_max[7];
+
+	int INTERVALS;
+
+	int getType() {
+		return m_type;
+	}
+
+private:
+	int m_type;
+};
+
 class RleBuffer {
 public:
-	RleBuffer(int w = 0, int h = 0) : m_tmp(0), m_tmp_size(0), m_read_pos(0), m_read_buf(0), m_read_size(0) {
+	RleBuffer(RleCodebook cb = RleCodebook(0), int w = 0, int h = 0) : m_tmp(0), m_tmp_size(0), m_read_pos(0), m_read_buf(0), m_read_size(0), codebook(cb) {
 		m_header.width = w;
 		m_header.height = h;
+		m_header.type = cb.getType();
 	}
 
 	void setFirstSymbol(uint8_t s) {
@@ -223,6 +333,7 @@ public:
 		f.write((char*)&(m_header.first_symbol), 2);
 		f.write((char*)&(m_header.width), 4);
 		f.write((char*)&(m_header.height), 4);
+		f.write((char*)&(m_header.type), 2);
 		f.write((char*)&tmp, 4);
 		f.write((char*)&(m_buffer[0]), sizeof(uint32_t) * m_buffer.size());
 	}
@@ -232,9 +343,11 @@ public:
 		f.read((char*)&(m_header.first_symbol), 2);
 		f.read((char*)&(m_header.width), 4);
 		f.read((char*)&(m_header.height), 4);
+		f.read((char*)&(m_header.type), 2);
 		f.read((char*)&tmp, 4);
 		m_buffer.resize(tmp);
 		f.read((char*)&(m_buffer[0]), sizeof(uint32_t) * m_buffer.size());
+		codebook = RleCodebook(m_header.type);
 	}
 
 	int getNextLength() {
@@ -246,16 +359,16 @@ public:
 
 		//std::cout << binary(m_read_buf) << " " << binary(tmp) << " " << binary(data) << " " << m_read_pos << std::endl;
 
-		for (int i = 0; i < INTERVALS; ++i) {
-			uint8_t r = tmp & pref_msk[i];
+		for (int i = 0; i < codebook.INTERVALS; ++i) {
+			uint8_t r = tmp & codebook.pref_msk[i];
 			//std::cout << binary(r) << std::endl;
-			if ((tmp & pref_msk[i]) == pref_res[i]) {
-				data >>= (32 - data_len[i] - pref_len[i]);
-				data &= data_msk[i];
-				data += data_min[i];
+			if ((tmp & codebook.pref_msk[i]) == codebook.pref_res[i]) {
+				data >>= (32 - codebook.data_len[i] - codebook.pref_len[i]);
+				data &= codebook.data_msk[i];
+				data += codebook.data_min[i];
 
-				m_read_buf <<= data_len[i] + pref_len[i];
-				m_read_size -= data_len[i] + pref_len[i];
+				m_read_buf <<= codebook.data_len[i] + codebook.pref_len[i];
+				m_read_size -= codebook.data_len[i] + codebook.pref_len[i];
 
 				//std::cout << "Got: " << data << std::endl;
 
@@ -268,17 +381,18 @@ public:
 	RleBuffer & add(int len) {
 		int i;
 
-		for (i = 0; i < INTERVALS; ++i) {
-			if (len <= data_max[i]) {
-				addSymbol(prefixes[i], pref_len[i]);
-				addSymbol(len - data_min[i], data_len[i]);
+		for (i = 0; i < codebook.INTERVALS; ++i) {
+			if (len <= codebook.data_max[i]) {
+				addSymbol(codebook.prefixes[i], codebook.pref_len[i]);
+				addSymbol(len - codebook.data_min[i], codebook.data_len[i]);
 				//printf("0x%02x %d %d %d\n", prefixes[i], pref_len[i], len, data_len[i]);
 				break;
 			}
 		}
 
-		if (i >= INTERVALS)
-			std::cout << "Block too big!";
+		if (i >= codebook.INTERVALS) {
+			//std::cout << "Block too big!";
+		}
 
 		return *this;
 	}
@@ -343,9 +457,92 @@ private:
 	uint64_t m_read_size;
 
 	RLEHeader m_header;
+
+	RleCodebook codebook;
 };
 
+cv::Mat rle(RleBuffer & buf) {
+	cv::Mat img = cv::Mat::zeros(buf.getHeight(), buf.getWidth(), CV_8UC1);
 
+	cv::Size size = img.size();
+	uint32_t ctr = 0;
+	uchar current_symbol = buf.getFirstSymbol();
+
+	if (img.isContinuous()) {
+		size.width *= size.height;
+		size.height = 1;
+	}
+
+	for (int y = 0; y < size.height; ++y) {
+
+		uchar* img_p = img.ptr <uchar> (y);
+
+		for (int x = 0; x < size.width; ++x) {
+			ctr = buf.getNextLength();
+			for (int i = 0; i < ctr; ++i)
+				img_p[x+i] = current_symbol;
+
+			current_symbol = 255 - current_symbol;
+			x += ctr-1;
+		}
+	}
+
+	return img;
+}
+
+RleBuffer rle(const cv::Mat & img, int type = 0) {
+
+	if (img.channels() != 1) {
+		std::cout << "rle: img must be one channel!\n";
+		return RleBuffer(0, 0);
+	}
+
+	RleBuffer result(RleCodebook(type), img.size().width, img.size().height);
+
+	cv::Size size = img.size();
+	uint32_t ctr = 0;
+	uchar current_symbol = 128;
+
+	if (img.isContinuous()) {
+		size.width *= size.height;
+		size.height = 1;
+	}
+
+	for (int y = 0; y < size.height; ++y) {
+
+		const uchar* img_p = img.ptr <uchar> (y);
+
+		for (int x = 0; x < size.width; ++x) {
+			if (current_symbol == 128) {
+				current_symbol = img_p[x];
+				result.setFirstSymbol(current_symbol);
+			}
+
+			if (img_p[x] != current_symbol) {
+				result.add(ctr);
+				ctr = 1;
+				current_symbol = 255-current_symbol;
+			} else {
+				ctr++;
+			}
+		}
+
+		result.add(ctr);
+	}
+
+	result.finish();
+
+	std::cout << "Uncompressed size: " << (img.size().width * img.size().height) / 8 << std::endl;
+	std::cout << "Compressed size:   " << result.size() << std::endl;
+
+	return result;
+}
+
+// ===============================================================================================
+//
+// XOR
+//
+// ===============================================================================================
 
 cv::Mat en_xor(const cv::Mat & img) {
 
@@ -405,83 +602,11 @@ cv::Mat de_xor(const cv::Mat & img) {
 	return result;
 }
 
-
-cv::Mat rle(RleBuffer & buf) {
-	cv::Mat img = cv::Mat::zeros(buf.getHeight(), buf.getWidth(), CV_8UC1);
-
-	cv::Size size = img.size();
-	uint32_t ctr = 0;
-	uchar current_symbol = buf.getFirstSymbol();
-
-	if (img.isContinuous()) {
-		size.width *= size.height;
-		size.height = 1;
-	}
-
-	for (int y = 0; y < size.height; ++y) {
-
-		uchar* img_p = img.ptr <uchar> (y);
-
-		for (int x = 0; x < size.width; ++x) {
-			ctr = buf.getNextLength();
-			for (int i = 0; i < ctr; ++i)
-				img_p[x+i] = current_symbol;
-
-			current_symbol = 255 - current_symbol;
-			x += ctr-1;
-		}
-	}
-
-	return img;
-}
-
-RleBuffer rle(const cv::Mat & img) {
-
-	if (img.channels() != 1) {
-		std::cout << "rle: img must be one channel!\n";
-		return RleBuffer(0, 0);
-	}
-
-	RleBuffer result(img.size().width, img.size().height);
-
-	cv::Size size = img.size();
-	uint32_t ctr = 0;
-	uchar current_symbol = 128;
-
-	if (img.isContinuous()) {
-		size.width *= size.height;
-		size.height = 1;
-	}
-
-	for (int y = 0; y < size.height; ++y) {
-
-		const uchar* img_p = img.ptr <uchar> (y);
-
-		for (int x = 0; x < size.width; ++x) {
-			if (current_symbol == 128) {
-				current_symbol = img_p[x];
-				result.setFirstSymbol(current_symbol);
-			}
-
-			if (img_p[x] != current_symbol) {
-				result.add(ctr);
-				ctr = 1;
-				current_symbol = 255-current_symbol;
-			} else {
-				ctr++;
-			}
-		}
-
-		result.add(ctr);
-	}
-
-	result.finish();
-
-	std::cout << "Uncompressed size: " << (img.size().width * img.size().height) / 8 << std::endl;
-	std::cout << "Compressed size:   " << result.size() << std::endl;
-
-	return result;
-}
+// ===============================================================================================
+//
+// Encode and decode routines
+//
+// ===============================================================================================
 
 struct Header {
 	bool gray;
@@ -524,7 +649,17 @@ bool encode(const std::string & in_fname, const std::string & out_fname) {
 	// split image into bitplanes
 	for (int i = 0; i < header.channels; ++i) {
 		for (int p = 0; p < 8; ++p) {
-			RleBuffer buf = rle(getBitPlane(channels[i], p));
+			int best = 0;
+			int bestt = -1;
+			for (int type=0; type < 3; ++type) {
+				RleBuffer buf = rle(getBitPlane(channels[i], p), type);
+				if (bestt < 0 || buf.size() < best) {
+					best = buf.size();
+					bestt = type;
+				}
+			}
+
+			RleBuffer buf = rle(getBitPlane(channels[i], p), bestt);
 			buf.saveToFile(f);
 		}
 	}
@@ -565,19 +700,16 @@ bool decode(const std::string & in_fname, const std::string & out_fname) {
 	return true;
 }
 
-
+// ===============================================================================================
+//
+// Entry point
+//
+// ===============================================================================================
 
 int main(int argc, char * argv[]) {
 	if (argc < 2) {
 		std::cout << "Usage: " << argv[0] << " IMAGE" << std::endl;
 		return 0;
-	}
-
-	for (int  i = 0; i < 256; ++i) {
-		if (graydecode(graycode(i)) != i)
-			std::cout << "Dupa!\n";
-		if (graycode(graydecode(i)) != i)
-			std::cout << "Dupa 2!\n";
 	}
 
 	encode(argv[1], "output.rle");
