@@ -6,8 +6,13 @@ SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
 # Find all required packages
 FIND_PACKAGE( Boost REQUIRED program_options)
 
+INCLUDE_DIRECTORIES(${BOOST_INCLUDEDIR})
+
 # Find OpenCV library files
 FIND_PACKAGE( OpenCV REQUIRED )
+
+ADD_EXECUTABLE(enchuf enchuf.cpp)
+ADD_EXECUTABLE(dechuf dechuf.cpp)
 
 #ADD_EXECUTABLE(split split.cpp)
 #TARGET_LINK_LIBRARIES(split ${OpenCV_LIBS})
