@@ -11,6 +11,9 @@ FIND_PACKAGE( OpenCV REQUIRED )
 ADD_EXECUTABLE(split split.cpp)
 TARGET_LINK_LIBRARIES(split ${OpenCV_LIBS})
 
+#ADD_EXECUTABLE(bayer_split bayer_split.cpp)
+#TARGET_LINK_LIBRARIES(bayer_split ${OpenCV_LIBS})
+
 ADD_EXECUTABLE(bitsplit bitsplit.cpp)
 TARGET_LINK_LIBRARIES(bitsplit ${OpenCV_LIBS})
 
@@ -19,5 +22,8 @@ TARGET_LINK_LIBRARIES(nkb2gray ${OpenCV_LIBS})
 
 ADD_EXECUTABLE(rle rle.cpp)
 TARGET_LINK_LIBRARIES(rle ${OpenCV_LIBS})
+
+ADD_EXECUTABLE(codec codec.cpp)
+TARGET_LINK_LIBRARIES(codec ${OpenCV_LIBS})
 
 ADD_EXECUTABLE(analyze analyze.cpp)

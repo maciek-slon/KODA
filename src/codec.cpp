@@ -13,6 +13,149 @@
 #include <cv.h>
 #include <highgui.h>
 
+cv::Mat getBitPlane(const cv::Mat & img, int plane) {
+
+	if (img.channels() != 1) {
+		std::cout << "getBitPlane: img must be one channel!\n";
+		return cv::Mat();
+	}
+
+	cv::Mat result = img.clone();
+	cv::Size size = img.size();
+
+	int mask = 1 << plane;
+
+	if (img.isContinuous() && result.isContinuous()) {
+		size.width *= size.height;
+		size.height = 1;
+	}
+
+	for (int y = 0; y < size.height; ++y) {
+
+		const uchar* img_p = img.ptr <uchar> (y);
+		uchar* res_p = result.ptr <uchar> (y);
+
+		for (int x = 0; x < size.width; ++x) {
+			res_p[x] = (img_p[x] & mask) ? 255 : 0;
+		}
+
+	}
+
+	return result;
+}
+
+cv::Mat mergeBitPlanes(const std::vector<cv::Mat> & planes) {
+	if (planes.size() != 8) {
+		std::cout << "mergeBitPlanes: must be planes.size() == 8!\n";
+		return cv::Mat();
+	}
+
+	cv::Mat result = planes[0].clone();
+	cv::Size size = result.size();
+
+	bool cont = true;
+
+	if (!result.isContinuous())
+		cont = false;
+
+	for (int i = 0; i < planes.size(); ++i)
+		if (!planes[i].isContinuous())
+			cont = false;
+
+
+	if (cont) {
+		size.width *= size.height;
+		size.height = 1;
+	}
+
+	for (int y = 0; y < size.height; ++y) {
+
+		const uchar* img_p[8];
+		for (int i = 0; i < 8; ++i)
+			img_p[i] = planes[i].ptr <uchar> (y);
+
+		uchar* res_p = result.ptr <uchar> (y);
+
+		for (int x = 0; x < size.width; ++x) {
+			uchar val = 0;
+			for (int i = 8; i > 0; --i) {
+				val <<= 1;
+				val += img_p[i-1][x] > 0 ? 1 : 0;
+			}
+			res_p[x] = val;
+		}
+
+	}
+
+	return result;
+}
+
+//
+// NKB2GRAY
+//
+
+static std::string binary(uchar i)
+{
+	std::string result;
+	for (int bit = 0; bit < 8; ++bit) {
+		result = (char)((i & 1) + '0') + result;
+		i >>= 1;
+	}
+	return result;
+}
+
+static uchar graycode(uchar i)
+{
+//	for (int bit = 1; bit < 8; ++bit)
+//		i ^= (i & 1 << bit) >> 1;
+	return i ^= i >> 1;
+}
+
+static uchar graydecode(uchar b) {
+   b ^= b >> 1;
+   b ^= b >> 2;
+   b ^= b >> 4;
+
+   return b;
+ }
+
+cv::Mat nkb2gray(const cv::Mat & img, bool reverse = false) {
+
+	if (img.channels() != 1) {
+		std::cout << "getBitPlane: img must be one channel!\n";
+		return cv::Mat();
+	}
+
+	cv::Mat result = img.clone();
+	cv::Size size = img.size();
+
+	if (img.isContinuous() && result.isContinuous()) {
+		size.width *= size.height;
+		size.height = 1;
+	}
+
+	for (int y = 0; y < size.height; ++y) {
+
+		const uchar* img_p = img.ptr <uchar> (y);
+		uchar* res_p = result.ptr <uchar> (y);
+
+		for (int x = 0; x < size.width; ++x)
+			if (reverse)
+				res_p[x] = graydecode(img_p[x]);
+			else
+				res_p[x] = graycode(img_p[x]);
+
+
+	}
+
+	return result;
+}
+
+
+
+
+
+
 int prefixes[] = {  0x00,   0x02,   0x06,   0x0E,   0x1E,   0x3E,       0x7E};
 int pref_msk[] = {  0x80,   0xC0,   0xE0,   0xF0,   0xF8,   0xFC,       0xFE};
 int pref_res[] = {  0x00,   0x80,   0xC0,   0xE0,   0xF0,   0xF8,       0xFC};
@@ -66,8 +209,17 @@ public:
 	}
 
 	void saveToFile(const std::string & filename) {
-		uint32_t tmp = m_buffer.size();
 		std::ofstream f(filename.c_str(), std::ios_base::out | std::ios_base::binary);
+		saveToFile(f);
+	}
+
+	void loadFromFile(const std::string & filename) {
+		std::ifstream f(filename.c_str(), std::ios_base::in | std::ios_base::binary);
+		loadFromFile(f);
+	}
+
+	void saveToFile(std::ofstream & f) {
+		uint32_t tmp = m_buffer.size();
 		f.write((char*)&(m_header.first_symbol), 2);
 		f.write((char*)&(m_header.width), 4);
 		f.write((char*)&(m_header.height), 4);
@@ -75,9 +227,8 @@ public:
 		f.write((char*)&(m_buffer[0]), sizeof(uint32_t) * m_buffer.size());
 	}
 
-	void loadFromFile(const std::string & filename) {
+	void loadFromFile(std::ifstream & f) {
 		uint32_t tmp;
-		std::ifstream f(filename.c_str(), std::ios_base::in | std::ios_base::binary);
 		f.read((char*)&(m_header.first_symbol), 2);
 		f.read((char*)&(m_header.width), 4);
 		f.read((char*)&(m_header.height), 4);
@@ -332,59 +483,105 @@ RleBuffer rle(const cv::Mat & img) {
 	return result;
 }
 
+struct Header {
+	bool gray;
+	int channels;
+};
+
+bool encode(const std::string & in_fname, const std::string & out_fname) {
+	Header header;
+	header.gray = true;
+
+
+	cv::Mat img = cv::imread(in_fname.c_str());
+	if (img.empty()) {
+		std::cout << "Can't load image from file: " << in_fname << std::endl;
+		return false;
+	}
+
+	std::ofstream f(out_fname.c_str(), std::ios_base::out | std::ios_base::binary);
+
+	std::vector<cv::Mat> channels;
+
+	if (img.channels() > 1) {
+		// split image into channels
+		cv::split(img, channels);
+	} else {
+		// image is one channel
+		channels.push_back(img);
+	}
+
+	header.channels = channels.size();
+
+	f.write((char*)&header, sizeof(header));
+
+	if (header.gray) {
+		for (int i = 0; i < channels.size(); ++i) {
+			channels[i] = nkb2gray(channels[i]);
+		}
+	}
+
+	// split image into bitplanes
+	for (int i = 0; i < header.channels; ++i) {
+		for (int p = 0; p < 8; ++p) {
+			RleBuffer buf = rle(getBitPlane(channels[i], p));
+			buf.saveToFile(f);
+		}
+	}
+
+	return true;
+}
+
+bool decode(const std::string & in_fname, const std::string & out_fname) {
+	Header header;
+	cv::Mat tmp;
+
+	std::ifstream f(in_fname.c_str(), std::ios_base::out | std::ios_base::binary);
+
+	std::vector<cv::Mat> channels;
+
+	f.read((char*)&header, sizeof(header));
+	for (int i = 0; i < header.channels; ++i) {
+		std::vector<cv::Mat> planes;
+		for (int p = 0; p < 8; ++p) {
+			RleBuffer buf;
+			buf.loadFromFile(f);
+			tmp = rle(buf);
+
+			planes.push_back(tmp);
+		}
+
+
+		tmp = mergeBitPlanes(planes);
+		if (header.gray)
+			channels.push_back(nkb2gray(tmp, true));
+		else
+			channels.push_back(tmp);
+	}
+
+	cv::merge(channels, tmp);
+	cv::imwrite(out_fname.c_str(), tmp);
+
+	return true;
+}
+
+
 
 int main(int argc, char * argv[]) {
-	bool encode = true;
-
 	if (argc < 2) {
 		std::cout << "Usage: " << argv[0] << " IMAGE" << std::endl;
 		return 0;
 	}
 
-	if (argc >= 3) {
-		std::string arg2 = argv[2];
-		if (arg2 == "-d")
-			encode = false;
+	for (int  i = 0; i < 256; ++i) {
+		if (graydecode(graycode(i)) != i)
+			std::cout << "Dupa!\n";
+		if (graycode(graydecode(i)) != i)
+			std::cout << "Dupa 2!\n";
 	}
 
-	if (encode) {
-		std::string out_name = argv[1];
-		out_name = out_name + ".rle";
-
-		std::cout << "Encoding " << argv[1] << "->" << out_name << std::endl;
-
-		cv::Mat img = cv::imread(argv[1], -1);
-		if (img.empty()) {
-			std::cout << "Can't load image from file: " << argv[1] << std::endl;
-			return 0;
-		}
-
-		if (img.channels() != 1) {
-			std::cout << "Image should have 1 channel!" << std::endl;
-			return 0;
-		}
-
-		//cv::Mat enxor = en_xor(img);
-		//cv::Mat dexor = de_xor(enxor);
-		//cv::imwrite("enxor.bmp", enxor);
-		//cv::imwrite("dexor.bmp", dexor);
-
-		RleBuffer res = rle(img);
-		res.saveToFile(out_name);
-	} else {
-		RleBuffer res;
-		std::string out_name = argv[1];
-		out_name = out_name.substr(0, out_name.find_last_of('.'));
-
-		std::cout << "Decoding " << argv[1] << "->" << out_name << std::endl;
-
-		res.loadFromFile(argv[1]);
-		cv::Mat res_img = rle(res);
-		cv::imwrite(out_name.c_str(), res_img);
-	}
-
-
-
+	encode(argv[1], "output.rle");
+	decode("output.rle", "input.bmp");
 
 	return 0;
 }

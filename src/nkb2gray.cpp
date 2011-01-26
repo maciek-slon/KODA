@@ -23,7 +23,7 @@ static std::string binary(uchar i)
 
 static uchar graycode(uchar i)
 {
-	for (int bit = 1; bit < 8; ++bit) 
+	for (int bit = 1; bit < 8; ++bit)
 		i ^= (i & 1 << bit) >> 1;
 	return i;
 }
@@ -50,7 +50,7 @@ cv::Mat nkb2gray(const cv::Mat & img) {
 
 		for (int x = 0; x < size.width; ++x)
 			res_p[x] = graycode(img_p[x]);
-			
+
 
 	}
 
@@ -71,16 +71,16 @@ int main(int argc, char * argv[]) {
 	}
 
 	if (img.channels() != 1) {
-		std::cout << "Image chuld have 1 channel!" << std::endl;
+		std::cout << "Image should have 1 channel!" << std::endl;
 		return 0;
 	}
 
-	for (int i = 0; i < 256; ++i) 
+	for (int i = 0; i < 256; ++i)
 		std::cout << std::setw(3) << i << " " << binary(graycode(i)) << std::endl;
 
 	std::string name = argv[1];
 	name = name.substr(0, name.find_first_of('.')) + '_';
 	imwrite(name + "gray.bmp", nkb2gray(img));
-	
+
 	return 0;
 }
