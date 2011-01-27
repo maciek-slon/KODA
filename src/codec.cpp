@@ -559,10 +559,10 @@ cv::Mat en_xor(const cv::Mat & img) {
 	cv::Mat result = img.clone();
 	cv::Size size = img.size();
 
-	if (img.isContinuous() && result.isContinuous()) {
-		size.width *= size.height;
-		size.height = 1;
-	}
+	//if (img.isContinuous() && result.isContinuous()) {
+	//	size.width *= size.height;
+	//	size.height = 1;
+	//}
 
 	for (int y = 0; y < size.height; ++y) {
 
@@ -588,10 +588,10 @@ cv::Mat de_xor(const cv::Mat & img) {
 	cv::Mat result = img.clone();
 	cv::Size size = img.size();
 
-	if (img.isContinuous() && result.isContinuous()) {
-		size.width *= size.height;
-		size.height = 1;
-	}
+	//if (img.isContinuous() && result.isContinuous()) {
+	//	size.width *= size.height;
+	//	size.height = 1;
+	//}
 
 	for (int y = 0; y < size.height; ++y) {
 
@@ -641,9 +641,9 @@ std::vector<cv::Mat> bayerSplit(const cv::Mat & img) {
 		}
 	}
 
-	//cv::imwrite("r.bmp", ch_r);
-	//cv::imwrite("g.bmp", ch_g);
-	//cv::imwrite("b.bmp", ch_b);
+	cv::imwrite("r.bmp", ch_r);
+	cv::imwrite("g.bmp", ch_g);
+	cv::imwrite("b.bmp", ch_b);
 
 	return channels;
 
@@ -845,7 +845,7 @@ void enchuf(const std::string & in_f, const std::string & out_f)
 
 	int output_count = outf.length ();
 
-	std::cout << "After Huffman: " << input_count << "->" << output_count << " (" << (100 - 100.0*output_count/input_count) << "% less)\n";
+	//std::cout << "After Huffman: " << input_count << "->" << output_count << " (" << (100 - 100.0*output_count/input_count) << "% less)\n";
 }
 
 void dechuf(const std::string & in_f, const std::string & out_f)
@@ -949,6 +949,7 @@ void dechuf(const std::string & in_f, const std::string & out_f)
 
 struct Header {
 	bool gray;
+	bool exor;
 	int channels;
 	// 1 - RGB, 2 - HSV
 	int conversion;
@@ -963,7 +964,7 @@ void storeRaw(std::ofstream & f, const std::string & fname) {
 	int input_count = inf.tellg ();
 	inf.seekg (0, std::ios::beg);
 
-	std::cout << input_count << std::endl;
+	//std::cout << input_count << std::endl;
 	char * buf = new char[input_count];
 
 	inf.read(buf, input_count);
@@ -979,7 +980,7 @@ void retrieveRaw(std::ifstream & f, const std::string & fname) {
 
 	int input_count;
 	f.read((char*)&input_count, 4);
-	std::cout << input_count << std::endl;
+	//std::cout << input_count << std::endl;
 
 	char * buf = new char[input_count];
 	f.read(buf, input_count);
@@ -1032,16 +1033,20 @@ bool encode(const std::string & in_fname, const std::string & out_fname, Header 
 		for (int p = 0; p < 8; ++p) {
 			int best = 0;
 			int bestt = -1;
+			cv::Mat bp = getBitPlane(channels[i], p);
+			if (header.exor) {
+				bp = en_xor(bp);
+			}
 			for (int type=0; type < 6; ++type) {
-				RleBuffer buf = rle(getBitPlane(channels[i], p), type);
+				RleBuffer buf = rle(bp, type);
 				if (bestt < 0 || buf.size() < best) {
 					best = buf.size();
 					bestt = type;
 				}
 			}
 
-			RleBuffer buf = rle(getBitPlane(channels[i], p), bestt);
-			std::cout << i << p << ": " << bestt << "@" << buf.size() << std::endl;
+			RleBuffer buf = rle(bp, bestt);
+			//std::cout << i << p << ": " << bestt << "@" << buf.size() << std::endl;
 
 			if (header.post == 1) {
 				buf.saveToFile("tmp");
@@ -1077,6 +1082,10 @@ bool decode(const std::string & in_fname, const std::string & out_fname) {
 				buf.loadFromFile(f);
 			}
 			tmp = rle(buf);
+
+			if (header.exor) {
+				tmp = de_xor(tmp);
+			}
 
 			planes.push_back(tmp);
 		}
@@ -1164,6 +1173,12 @@ int main(int argc, char * argv[]) {
 		header.gray = 1;
 	} else {
 		header.gray = 0;
+	}
+
+	if (vm.count("xor")) {
+		header.exor = 1;
+	} else {
+		header.exor = 0;
 	}
 
 	if (vm.count("huffman")) {
